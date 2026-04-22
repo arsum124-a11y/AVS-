@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>義務工作發展局 - 百萬富翁</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        :root {
+            --bg-dark: #00051a; --atv-blue: #0b1d3d; --atv-gold: #e1b431;
+            --atv-border: #4d94ff; --correct-green: #008f11; --wrong-red: #b30000;
+        }
+        body {
+            background: var(--bg-dark); color: white; font-family: "Microsoft JhengHei", sans-serif;
+            margin: 0; height: 100vh; overflow: hidden; display: flex; align-items: center; justify-content: center;
+        }
+        #start-screen { position: fixed; inset: 0; background: radial-gradient(circle, #2a5298, #00051a); z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .btn-style { padding: 15px 40px; font-size: 24px; background: var(--atv-gold); border: none; border-radius: 50px; cursor: pointer; font-weight: bold; color: black; box-shadow: 0 0 15px var(--atv-gold); }
+
+        /* 視像區 */
+        #video-container {
+            position: absolute; left: 20px; bottom: 20px; width: 260px; height: 195px;
+            border: 3px solid var(--atv-gold); border-radius: 10px; overflow: hidden; background: #000; z-index: 100; display: none;
+        }
+        #webcam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+
+        /* 金額大道 - 加寬以容納文字 */
+        .money-ladder {
+            position: absolute; right: 20px; top: 40px; bottom: 40px; width: 320px;
+            background: rgba(0, 10, 50, 0.85); border: 2px solid var(--atv-border);
+            display: flex; flex-direction: column-reverse; overflow-y: auto; padding: 10px;
+            scrollbar-width: none; border-radius: 5px;
+        }
+        .money-step { display: flex; align-items: center; padding: 6px 10px; font-size: 16px; color: var(--atv-gold); border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .step-num { width: 30px; }
+        .step-val { width: 90px; }
+        .step-txt { flex: 1; font-size: 13px; text-align: right; color: #aaa; }
+        
+        .money-step.active { background: #fff; color: #000; font-weight: bold; border-radius: 4px; }
+        .money-step.active .step-txt { color: #333; }
+        .money-step.safe { color: #fff; font-weight: bold; }
+        .money-step.safe .step-txt { color: #fff; font-size: 14px; }
+
+        /* 遊戲區域 */
+        .game-main { width: 55%; margin-right: 340px; display: flex; flex-direction: column; gap: 35px; opacity: 0; transition: 1s; }
+        .hexagon { background: var(--atv-blue); border: 2px solid var(--atv-border); clip-path: polygon(2% 0%, 98% 0%, 100% 50%, 98% 100%, 2% 100%, 0% 50%); padding: 25px 45px; position: relative; }
+        .question-box { font-size: 28px; text-align: center; min-height: 70px; }
+        .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .option { font-size: 22px; cursor: pointer; transition: 0.2s; }
+        .option span { color: var(--atv-gold); margin-right: 12px; font-weight: bold; }
+        .selected { background: var(--atv-gold) !important; color: black; }
+        .correct { background: var(--correct-green) !important; color: white; }
+        .wrong { background: var(--wrong-red) !important; }
+
+        /* 錦囊 */
+        .lifelines { position: absolute; top: 20px; left: 20px; display: flex; gap: 15px; }
+        .lifeline { width: 70px; height: 40px; border: 2px solid var(--atv-border); border-radius: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; background: #000; font-weight: bold; }
+        .lifeline.used { opacity: 0.3; filter: grayscale(1); position: relative; }
+        .lifeline.used::after { content: "X"; color: red; position: absolute; font-size: 28px; }
+
+        #retry-layer { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 2500; display: none; flex-direction: column; align-items: center; justify-content: center; }
+        #money-popup { position: fixed; top: 45%; left: 50%; transform: translate(-50%, -50%) scale(0); background: #000; border: 5px solid var(--atv-gold); padding: 50px 100px; font-size: 45px; color: var(--atv-gold); z-index: 1500; display: none; text-align: center; border-radius: 15px; line-height: 1.5; }
+        
+        @keyframes popIn { 0% { transform: translate(-50%, -50%) scale(0); opacity: 0; } 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+    </style>
+</head>
+<body onclick="startMainMusic()">
+
+    <div id="start-screen">
+        <h1 style="color:var(--atv-gold); font-size: 50px; margin-bottom: 10px;">百萬富翁</h1>
+        <p style="margin-bottom: 30px;">點擊任何地方播放背景音樂</p>
+        <button class="btn-style" onclick="initGame()">開始挑戰</button>
+    </div>
+
+    <div id="video-container"><video id="webcam" autoplay playsinline></video></div>
+    
+    <div id="retry-layer">
+        <h2 style="font-size:50px; color:white;">挑戰失敗！</h2>
+        <button class="btn-style" onclick="continueAfterWrong()">重置錦囊並繼續下一題</button>
+    </div>
+    
+    <div id="money-popup"></div>
+
+    <div class="lifelines">
+        <div class="lifeline" id="l-50" onclick="use5050()">50:50</div>
+        <div class="lifeline" id="l-ai" onclick="useL('l-ai')">📞</div>
+        <div class="lifeline" id="l-aud" onclick="useL('l-aud')">👥</div>
+    </div>
+
+    <div class="money-ladder" id="money-ladder"></div>
+
+    <div class="game-main" id="game-ui">
+        <div class="hexagon question-box" id="q-txt"></div>
+        <div class="options-grid">
+            <div class="hexagon option" onclick="hChoice(0)"><span>A:</span><div id="o-0" style="display:inline;"></div></div>
+            <div class="hexagon option" onclick="hChoice(1)"><span>B:</span><div id="o-1" style="display:inline;"></div></div>
+            <div class="hexagon option" onclick="hChoice(2)"><span>C:</span><div id="o-2" style="display:inline;"></div></div>
+            <div class="hexagon option" onclick="hChoice(3)"><span>D:</span><div id="o-3" style="display:inline;"></div></div>
+        </div>
+    </div>
+
+    <script>
+        const moneyList = [
+            {v:"1,000", t:""}, {v:"2,000", t:""}, {v:"3,000", t:""}, {v:"4,000", t:""}, {v:"5,000", t:"標誌性義工服務計劃"},
+            {v:"8,000", t:""}, {v:"12,000", t:""}, {v:"16,000", t:""}, {v:"24,000", t:""}, {v:"32,000", t:"深化青年義工發展"},
+            {v:"40,000", t:""}, {v:"60,000", t:""}, {v:"80,000", t:""}, {v:"100,000", t:""}, {v:"125,000", t:"開拓資源與優化營運"},
+            {v:"250,000", t:""}, {v:"350,000", t:""}, {v:"500,000", t:""}, {v:"750,000", t:""}, {v:"1,000,000", t:"科技應用與效能提升"}
+        ];
+
+        const quizData = [
+            {q:"「一打」雞蛋是指有多少隻？", a:["12隻","10隻","6隻","24隻"], c:0},
+            {q:"成語「半斤八兩」中，一斤在古代等於幾多兩？", a:["16兩","10兩","12兩","8兩"], c:0},
+            {q:"太陽從哪個方向升起？", a:["東方","南方","西方","北方"], c:0},
+            {q:"奧運五環標誌中，藍色環代表哪個洲？", a:["歐洲","亞洲","非洲","美洲"], c:0},
+            {q:"香港特區的區花是什麼？", a:["洋紫荊","牡丹","蓮花","水仙"], c:0},
+            {q:"人體中最大的器官是什麼？", a:["皮膚","肝臟","心臟","肺部"], c:0},
+            {q:"下列哪位科學家提出了「相對論」？", a:["愛因斯坦","牛頓","愛迪生","霍金"], c:0},
+            {q:"世界上面積最大的國家是？", a:["俄羅斯","加拿大","中國","美國"], c:0},
+            {q:"成語「胸有成竹」最初是用來形容什麼？", a:["畫畫","打仗","寫詩","建築"], c:0},
+            {q:"人體骨骼共有多少塊？", a:["206塊","180塊","220塊","250塊"], c:0},
+            {q:"金庸小說《神鵰俠侶》中，主角楊過的坐騎是？", a:["大鵰","白馬","神驢","神象"], c:0},
+            {q:"地球大氣中含量最高的氣體是？", a:["氮氣","氧氣","二氧化碳","氫氣"], c:0},
+            {q:"下列哪個城市被稱為「音樂之都」？", a:["維也納","巴黎","倫敦","威尼斯"], c:0},
+            {q:"太陽系中體積最大的行星是？", a:["木星","土星","海王星","火星"], c:0},
+            {q:"《三國演義》中，被稱為「智聖」的是誰？", a:["諸葛亮","周瑜","司馬懿","曹操"], c:0},
+            {q:"發明活字印刷術的是中國古代哪位人物？", a:["畢昇","蔡倫","張衡","沈括"], c:0},
+            {q:"一公里的長度相等於多少米？", a:["1000米","100米","500米","10000米"], c:0},
+            {q:"中國最早的朝代是？", a:["夏朝","商朝","周朝","秦朝"], c:0},
+            {q:"貝多芬的《第九交響曲》又被稱為？", a:["合唱","命運","英雄","田園"], c:0},
+            {q:"元素週期表中，編號第 1 號的元素是？", a:["氫","氦","氧","碳"], c:0}
+        ];
+
+        let cur = 0, canA = false, musicStarted = false;
+        let activeBGM = null, activeSFX = null;
+
+        // 生成金額大道
+        const ladderEl = document.getElementById('money-ladder');
+        moneyList.forEach((item, i) => {
+            const d = document.createElement('div');
+            d.className = 'money-step' + ((i+1)%5===0 ? ' safe' : '');
+            d.id = `step-${i}`;
+            d.innerHTML = `<span class="step-num">${i+1}</span><span class="step-val">$${item.v}</span><span class="step-txt">${item.t}</span>`;
+            ladderEl.appendChild(d);
+        });
+
+        function startMainMusic() {
+            if(!musicStarted) {
+                playSound("main.mp3", true, true);
+                musicStarted = true;
+            }
+        }
+
+        async function initGame() {
+            startMainMusic();
+            document.getElementById('start-screen').style.display = 'none';
+            try {
+                const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+                document.getElementById('webcam').srcObject = s;
+                document.getElementById('video-container').style.display = 'block';
+            } catch(e) {}
+            
+            setTimeout(() => {
+                document.getElementById('game-ui').style.opacity = '1';
+                startFlow();
+            }, 4000); 
+        }
+
+        function playSound(file, loop=false, bgm=false) {
+            if(!bgm && activeSFX) { activeSFX.pause(); activeSFX.src=""; }
+            if(bgm && activeBGM) { activeBGM.pause(); activeBGM.src=""; }
+            const a = new Audio("music/" + file);
+            a.loop = loop;
+            if(bgm) activeBGM = a; else activeSFX = a;
+            a.play().catch(e=>{});
+        }
+
+        function startFlow() {
+            canA = false;
+            document.getElementById('retry-layer').style.display = 'none';
+            document.querySelectorAll('.money-step').forEach(s=>s.classList.remove('active'));
+            const cs = document.getElementById(`step-${cur}`);
+            cs.classList.add('active');
+            cs.scrollIntoView({behavior:'smooth', block:'center'});
+
+            const pop = document.getElementById('money-popup');
+            pop.innerHTML = `第 ${cur+1} 題<br>$${moneyList[cur].v}<br><span style="font-size:24px; color:#fff;">${moneyList[cur].t}</span>`;
+            pop.style.display = 'block';
+            pop.style.animation = 'popIn 0.8s forwards';
+            
+            playSound("new_q.mp3");
+            setTimeout(() => {
+                pop.style.display = 'none';
+                playSound(cur < 10 ? "normal.mp3" : "hard.mp3", true, true);
+                document.getElementById('q-txt').innerText = quizData[cur].q;
+                
+                let opts = [...quizData[cur].a];
+                let correctStr = opts[0];
+                opts.sort(() => Math.random() - 0.5);
+                
+                for(let i=0; i<4; i++) {
+                    const el = document.querySelectorAll('.option')[i];
+                    el.style.visibility = 'visible';
+                    el.classList.remove('selected','correct','wrong');
+                    document.getElementById(`o-${i}`).innerText = opts[i];
+                    el.onclick = () => checkAns(i, opts[i] === correctStr);
+                }
+                canA = true;
+            }, 4000);
+        }
+
+        function checkAns(idx, isCorr) {
+            if(!canA) return; canA = false;
+            document.querySelectorAll('.option')[idx].classList.add('selected');
+            
+            setTimeout(() => {
+                if(activeBGM) activeBGM.pause();
+                if(isCorr) {
+                    document.querySelectorAll('.option')[idx].classList.add('correct');
+                    confetti({particleCount:100, spread:70, origin:{y:0.6}});
+                    playSound("correct.mp3");
+                    setTimeout(() => { 
+                        cur++; 
+                        if(cur < 20) startFlow(); 
+                        else alert("恭喜你成為百萬富翁！");
+                    }, 5000);
+                } else {
+                    document.querySelectorAll('.option')[idx].classList.add('wrong');
+                    playSound("wrong.mp3");
+                    setTimeout(() => { document.getElementById('retry-layer').style.display = 'flex'; }, 2000);
+                }
+            }, 2000);
+        }
+
+        function continueAfterWrong() {
+            document.querySelectorAll('.lifeline').forEach(l=>l.classList.remove('used'));
+            cur++; 
+            if(cur < 20) startFlow();
+        }
+
+        function use5050() {
+            if(!canA || document.getElementById('l-50').classList.contains('used')) return;
+            document.getElementById('l-50').classList.add('used');
+            let count = 0;
+            const correctText = quizData[cur].a[0];
+            document.querySelectorAll('.option').forEach(el => {
+                const txt = el.querySelector('div').innerText;
+                if(txt !== correctText && count < 2) {
+                    el.style.visibility = 'hidden';
+                    count++;
+                }
+            });
+        }
+        function useL(id) { document.getElementById(id).classList.add('used'); }
+    </script>
+</body>
+</html>
