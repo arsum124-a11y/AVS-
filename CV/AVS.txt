@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>義務工作發展局 - 百萬富翁</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        :root {
+            /* 預設深藍色 */
+            --bg-blue: #000b29; 
+            --atv-blue: #0b1d3d; --atv-gold: #e1b431;
+            --atv-border: #4d94ff; --correct-green: #008f11; --wrong-red: #b30000;
+        }
+        body {
+            background: var(--bg-blue); color: white; font-family: "Microsoft JhengHei", sans-serif;
+            margin: 0; height: 100vh; overflow: hidden; display: flex; align-items: center; justify-content: center;
+            transition: background 1s ease; /* 平滑切換背景色 */
+        }
+        /* 黑色背景類別 */
+        body.bg-black { background: #000000 !important; }
+
+        #start-screen { position: fixed; inset: 0; background: radial-gradient(circle, #2a5298, #00051a); z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .btn-style { padding: 15px 40px; font-size: 24px; background: var(--atv-gold); border: none; border-radius: 50px; cursor: pointer; font-weight: bold; color: black; box-shadow: 0 0 15px var(--atv-gold); transition: 0.3s; }
+        .btn-style:hover { transform: scale(1.1); }
+
+        #video-container {
+            width: 320px; height: 240px;
+            border: 3px solid var(--atv-border);
+            border-radius: 10px; overflow: hidden; background: #000;
+            margin-bottom: 20px; box-shadow: 0 0 20px rgba(77, 148, 255, 0.5);
+            display: none;
+        }
+        #webcam { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+
+        .money-ladder {
+            position: absolute; right: 20px; top: 40px; bottom: 40px; width: 330px;
+            background: rgba(0, 10, 50, 0.85); border: 2px solid var(--atv-border);
+            display: flex; flex-direction: column-reverse; overflow-y: auto; padding: 10px;
+            scrollbar-width: none; border-radius: 5px;
+        }
+        .money-step { display: flex; align-items: center; padding: 6px 10px; font-size: 16px; color: var(--atv-gold); border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .step-num { width: 30px; }
+        .step-val { width: 90px; }
+        .step-txt { flex: 1; font-size: 13px; text-align: right; color: #aaa; }
+        .money-step.active { background: #fff; color: #000 !important; font-weight: bold; border-radius: 4px; }
+        .money-step.safe { color: #fff; font-weight: bold; }
+
+        .game-main { width: 55%; margin-right: 300px; display: flex; flex-direction: column; align-items: center; opacity: 0; transition: 1s; }
+        .hexagon { background: var(--atv-blue); border: 2px solid var(--atv-border); clip-path: polygon(2% 0%, 98% 0%, 100% 50%, 98% 100%, 2% 100%, 0% 50%); padding: 25px 45px; width: 100%; box-sizing: border-box; }
+        .question-box { font-size: 28px; text-align: center; min-height: 70px; line-height: 1.4; margin-bottom: 30px; }
+        
+        .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 100%; }
+        .option { font-size: 22px; cursor: pointer; transition: 0.2s; padding: 15px 40px; position: relative; }
+        .option span { color: var(--atv-gold); margin-right: 12px; font-weight: bold; }
+        
+        .selected { background: var(--atv-gold) !important; color: black; }
+        .correct { background: var(--correct-green) !important; color: white !important; }
+        .wrong { background: var(--wrong-red) !important; color: white !important; }
+
+        .lifelines { position: absolute; top: 20px; left: 20px; display: flex; gap: 15px; }
+        .lifeline { width: 70px; height: 40px; border: 2px solid var(--atv-border); border-radius: 20px; display: flex; align-items: center; justify-content: center; cursor: pointer; background: #000; font-weight: bold; position: relative; }
+        .lifeline.used::after { content: "X"; color: red; position: absolute; font-size: 28px; }
+
+        #retry-layer { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 2500; display: none; flex-direction: column; align-items: center; justify-content: center; }
+        #money-popup { position: fixed; top: 45%; left: 50%; transform: translate(-50%, -50%) scale(0); background: #000; border: 5px solid var(--atv-gold); padding: 50px 100px; font-size: 45px; color: var(--atv-gold); z-index: 1500; display: none; text-align: center; border-radius: 15px; line-height: 1.5; }
+        @keyframes popIn { 0% { transform: translate(-50%, -50%) scale(0); opacity: 0; } 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+    </style>
+</head>
+<body onclick="startMainMusic()">
+
+    <div id="start-screen">
+        <h1 style="color:var(--atv-gold); font-size: 50px; margin-bottom: 10px;">百萬富翁</h1>
+        <p style="margin-bottom: 30px;">（請確保電腦已連接鏡頭）</p>
+        <button class="btn-style" onclick="initGame()">開始挑戰</button>
+    </div>
+
+    <div id="retry-layer">
+        <h2 style="font-size:50px; color:white; margin-bottom:30px;">挑戰失敗！</h2>
+        <button class="btn-style" onclick="continueAfterWrong()">繼續下一題 (重置錦囊)</button>
+    </div>
+    
+    <div id="money-popup"></div>
+
+    <div class="lifelines">
+        <div class="lifeline" id="l-50" onclick="use5050()">50:50</div>
+        <div class="lifeline" id="l-ai" onclick="useL('l-ai')">📞</div>
+        <div class="lifeline" id="l-aud" onclick="useL('l-aud')">👥</div>
+    </div>
+
+    <div class="money-ladder" id="money-ladder"></div>
+
+    <div class="game-main" id="game-ui">
+        <div id="video-container">
+            <video id="webcam" autoplay playsinline></video>
+        </div>
+        <div class="hexagon question-box" id="q-txt"></div>
+        <div class="options-grid">
+            <div class="hexagon option" id="opt-0"><span>A:</span><div id="o-0" style="display:inline;"></div></div>
+            <div class="hexagon option" id="opt-1"><span>B:</span><div id="o-1" style="display:inline;"></div></div>
+            <div class="hexagon option" id="opt-2"><span>C:</span><div id="o-2" style="display:inline;"></div></div>
+            <div class="hexagon option" id="opt-3"><span>D:</span><div id="o-3" style="display:inline;"></div></div>
+        </div>
+    </div>
+
+    <script>
+        const moneyList = [
+            {v:"1,000", t:""}, {v:"2,000", t:""}, {v:"3,000", t:""}, {v:"4,000", t:""}, {v:"5,000", t:"標誌性義工服務計劃"},
+            {v:"8,000", t:""}, {v:"12,000", t:""}, {v:"16,000", t:""}, {v:"24,000", t:""}, {v:"32,000", t:"深化青年義工發展"},
+            {v:"40,000", t:""}, {v:"60,000", t:""}, {v:"80,000", t:""}, {v:"100,000", t:""}, {v:"125,000", t:"開拓資源與優化營運"},
+            {v:"250,000", t:""}, {v:"350,000", t:""}, {v:"500,000", t:""}, {v:"750,000", t:""}, {v:"1,000,000", t:"科技應用與效能提升"}
+        ];
+
+        const quizData = [
+            {q:"香港義工團義工組長隊人數是？", a:["84位","56位","65位","72位"], c:0},
+            {q:"香港義工團義工組長隊共有多少位統籌？", a:["7位","6位","5位","8位"], c:0},
+            {q:"渣打香港馬拉松 2026 比賽日 CV Team William 的工作時間？", a:["14小時","9小時","11小時","16小時"], c:0},
+            {q:"每年大坑舞火龍義工服務 AVS 招募多少位義工？", a:["300位","100位","200位","400位"], c:0},
+            {q:"「萬眾同心公益金2025」招募 100 位義工共需時多少天？", a:["3天","1天","2天","4天"], c:0},
+            {q:"香港義工團成立了哪個工作小組？", a:["Youth-Connect","Youth-Power","Youth-Voice","義工Teen地"], c:0},
+            {q:"「Miracle Summer! 青年行義計劃」的主要對象年齡層是？", a:["12-39歲","16-30歲","12-35歲","16-39歲"], c:0},
+            {q:"「Miracle Summer! 青年行義計劃」2026年踏入多少週年？", a:["11週年","8週年","9週年","12週年"], c:0},
+            {q:"參與「Miracle Summer! 青年行義計劃」，必須完成多少小時的義工服務，才能獲得電子證書？", a:["12小時","10小時","15小時","20小時"], c:0},
+            {q:"[圖片題]以下哪一個不是「Miracle Summer! 青年行義計劃」曾舉辦過的義工服務？", a:["A","B","C","D"], c:0},
+            {q:"「Miracle Summer! 全民行義計劃」由那一間機構資助？", a:["平等機會委員會","社會福利署","關愛基金","香港賽馬會"], c:0},
+            {q:"截止 2026 年 4 月，香港義工團團體會員共有多少個？", a:["639個","745個","824個","598個"], c:0},
+            {q:"香港義工團個人會員續會的費用？", a:["以上皆是","$0","$25","$50"], c:0},
+            {q:"CV Team 有多少位職員已服務超過十年 (包括義務職員)？", a:["20位或以上","5位","10位","15位"], c:0},
+            {q:"「書出愛心．十元義賣」2025 年的籌款總額是多少？", a:["HK$1,376,591.4","HK$1,356,452.6","HK$1,401,552.5","HK$1,456,851.2"], c:0},
+            {q:"行義香港 (V-HK) 義工系統何時推出？", a:["2021年","2020年","2022年","2019年"], c:0},
+            {q:"參加香港義工團的網上迎新會時，會員需要答對多少百分比的題目，才能獲得義工時數？", a:["100%","90%","80%","70%"], c:0},
+            {q:"HKV-Award 2025 香港義工團提名了多少位個人會員？", a:["1198位","1215位","1183位","1233位"], c:0},
+            {q:"以下哪一項是 CV TEAM 同事投放最多時間的工作？", a:["文書工作","處理查詢","義工聯繫","活動策劃"], c:0},
+            {q:"處理一位個人會員(收郵寄)入會流程時，最少需要使用多少張 A4 紙？", a:["17張","11張","14張","6張"], c:0}
+        ];
+
+        let cur = 0, canA = false, musicStarted = false;
+        let activeBGM = null, activeSFX = null;
+
+        const ladderEl = document.getElementById('money-ladder');
+        moneyList.forEach((item, i) => {
+            const d = document.createElement('div');
+            d.className = 'money-step' + ((i+1)%5===0 ? ' safe' : '');
+            d.id = `step-${i}`;
+            d.innerHTML = `<span class="step-num">${i+1}</span><span class="step-val">$${item.v}</span><span class="step-txt">${item.t}</span>`;
+            ladderEl.appendChild(d);
+        });
+
+        function startMainMusic() {
+            if(!musicStarted) { playSound("main.mp3", true, true); musicStarted = true; }
+        }
+
+        async function initGame() {
+            startMainMusic();
+            document.getElementById('start-screen').style.display = 'none';
+            try {
+                const s = await navigator.mediaDevices.getUserMedia({ video: true });
+                document.getElementById('webcam').srcObject = s;
+                document.getElementById('video-container').style.display = 'block';
+            } catch(e) {}
+            
+            setTimeout(() => {
+                document.getElementById('game-ui').style.opacity = '1';
+                startFlow();
+            }, 1000); 
+        }
+
+        function playSound(file, loop=false, bgm=false) {
+            if(!bgm && activeSFX) { activeSFX.pause(); }
+            if(bgm && activeBGM) { activeBGM.pause(); }
+            const a = new Audio("music/" + file);
+            a.loop = loop;
+            if(bgm) activeBGM = a; else activeSFX = a;
+            a.play().catch(e=>{});
+        }
+
+        function startFlow() {
+            canA = false;
+            document.getElementById('retry-layer').style.display = 'none';
+            document.querySelectorAll('.money-step').forEach(s=>s.classList.remove('active'));
+            
+            // 背景顏色邏輯：1-10題深藍，11-20題全黑
+            if(cur >= 10) {
+                document.body.classList.add('bg-black');
+            } else {
+                document.body.classList.remove('bg-black');
+            }
+
+            const cs = document.getElementById(`step-${cur}`);
+            if(cs) {
+                cs.classList.add('active');
+                cs.scrollIntoView({behavior:'smooth', block:'center'});
+            }
+
+            const pop = document.getElementById('money-popup');
+            pop.innerHTML = `第 ${cur+1} 題<br>$${moneyList[cur].v}`;
+            pop.style.display = 'block';
+            pop.style.animation = 'popIn 0.8s forwards';
+            
+            playSound("new_q.mp3");
+            setTimeout(() => {
+                pop.style.display = 'none';
+                if(cur < 10) playSound("normal.mp3", true, true); 
+                else playSound("hard.mp3", true, true);
+                
+                document.getElementById('q-txt').innerText = quizData[cur].q;
+                let opts = [...quizData[cur].a];
+                let correctStr = opts[0];
+                opts.sort(() => Math.random() - 0.5);
+                
+                for(let i=0; i<4; i++) {
+                    const el = document.getElementById(`opt-${i}`);
+                    el.style.visibility = 'visible';
+                    el.classList.remove('selected','correct','wrong');
+                    document.getElementById(`o-${i}`).innerText = opts[i];
+                    el.onclick = () => checkAns(i, opts[i] === correctStr, correctStr);
+                }
+                canA = true;
+            }, 3000);
+        }
+
+        function checkAns(idx, isCorr, correctText) {
+            if(!canA) return; canA = false;
+            const options = document.querySelectorAll('.option');
+            options[idx].classList.add('selected');
+            
+            setTimeout(() => {
+                if(activeBGM) activeBGM.pause();
+                if(isCorr) {
+                    options[idx].classList.add('correct');
+                    confetti({particleCount:150, spread:70, origin:{y:0.6}});
+                    playSound("correct.mp3");
+                    setTimeout(() => { 
+                        cur++; 
+                        if(cur < 20) startFlow(); 
+                        else alert("恭喜過關！"); 
+                    }, 6000); 
+                } else {
+                    options[idx].classList.add('wrong');
+                    options.forEach(el => { 
+                        if (el.querySelector('div').innerText === correctText) el.classList.add('correct'); 
+                    });
+                    playSound("wrong.mp3");
+                    setTimeout(() => { document.getElementById('retry-layer').style.display = 'flex'; }, 3000);
+                }
+            }, 2000);
+        }
+
+        function continueAfterWrong() {
+            document.querySelectorAll('.lifeline').forEach(l=>l.classList.remove('used'));
+            cur++; 
+            if(cur < 20) startFlow();
+        }
+
+        function use5050() {
+            if(!canA || document.getElementById('l-50').classList.contains('used')) return;
+            document.getElementById('l-50').classList.add('used');
+            let count = 0;
+            const correctText = quizData[cur].a[0]; 
+            const options = Array.from(document.querySelectorAll('.option')).sort(() => Math.random() - 0.5);
+            for(let el of options) {
+                if(el.querySelector('div').innerText !== correctText && count < 2) {
+                    el.style.visibility = 'hidden';
+                    count++;
+                }
+            }
+        }
+        function useL(id) { if(canA) document.getElementById(id).classList.add('used'); }
+    </script>
+</body>
+</html>
